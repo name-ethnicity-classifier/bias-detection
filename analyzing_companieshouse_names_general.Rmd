@@ -1,0 +1,61 @@
+---
+title: "analyzing_companieshouse_names_generall"
+author: "Franziska Hafner"
+date: "14/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+personsWithSignificantControll <- read.csv("/Users/franziskahafner/Desktop/paper/testing_AI/input/persons-with-significant-controll-2020-05-30.csv")
+personsWithSignificantControll$year_of_birth[personsWithSignificantControll$year_of_birth>2020] <- NA
+personsWithSignificantControll$year_of_birth[personsWithSignificantControll$year_of_birth<=1900] <- NA
+```
+
+```{r}
+p <- ggplot(data = personsWithSignificantControll, aes(x = year_of_birth)) +
+  geom_histogram(binwidth = 1)+
+  labs(x="Year of Birth", y="Amount of People in Training Data", 
+      title="Distribution of Names in Training Data by Year of Birth")
+p
+```
+
+```{r}
+p <- ggplot(data = personsWithSignificantControll) +
+  geom_histogram(binwidth = 1, aes(x = personsWithSignificantControll$year_of_birth[!personsWithSignificantControll$nationality=="british"]))+
+  labs(x="Year of Birth", y="Amount of People in Training Data", 
+      title="Distribution of Names in Training Data by Year of Birth")
+p
+```
+
+```{r}
+years <- 1900:2020
+britishAmount <- rep(0,length(years))
+nonBritishAmount <- rep(0,length(years))
+
+namesBritishNonBritish <- data.frame(years, britishAmount, nonBritishAmount)
+
+for (y in years){
+  britishAmount <- nrow(subset(personsWithSignificantControll, (personsWithSignificantControll$year==y&personsWithSignificantControll$nationality=="british")))
+  nonBritishAmount <- nrow(subset(personsWithSignificantControll, (personsWithSignificantControll$year==y&personsWithSignificantControll$nationality!="british")))
+  namesBritishNonBritish[namesBritishNonBritish$years==y,"britishAmount"] <- britishAmount
+  namesBritishNonBritish[namesBritishNonBritish$years==y,"nonBritishAmount"] <- nonBritishAmount
+}
+```
+
+
+
+```{r}
+p <- ggplot(namesBritishNonBritish) +
+  geom_line(aes(x=years, y=britishAmount, color = "#ECA345")) +
+  geom_line(aes(x=years, y=nonBritishAmount, color = "#5045EC"))+
+  labs(x="Year of Birth", y="Amount of People in Training Data", 
+      title="Distribution of Names in Training Data by Year of Birth British vs non-British") +
+       scale_fill_manual(name = "Nationality", 
+                    label = c("British", "non-British"), 
+                    values = c("#ECA345", "#5045EC"))
+p
+```

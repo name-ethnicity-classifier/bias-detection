@@ -1,0 +1,254 @@
+---
+title: "Analyzing gender Bias of Name Ethnicity Classification"
+author: "Franziska Hafner"
+date: "09/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sf)
+library(ggplot2)
+library(dplyr)
+```
+
+# Analysis of Name Ethnicity Classification AI
+
+### Creating dataframe for analysis
+Here, the relevant csv files are read in, joined into one data frame, and an additional columns for whether or not the prediction was right (1 = right, 0 = false) is added.
+```{r}
+#21 and else analysis:
+#true_nationality <- read.csv("/Users/franziskahafner/Desktop/paper/testing_AI/input/names_to_ethnicity_known_gender_21else.csv")
+#predicted_nationality <- read.csv("/Users/franziskahafner/Desktop/paper/testing_AI/output/classified_known_gender_21else.csv")
+
+#14 and else analysis:
+true_nationality <- read.csv("/Users/franziskahafner/Desktop/paper/testing_AI/input/names_to_ethnicity_known_gender_and_age_14else.csv")
+predicted_nationality <- read.csv("/Users/franziskahafner/Desktop/paper/testing_AI/output/classified_known_gender_and_age_14else.csv")
+
+colnames(predicted_nationality) <- c("names", "predicted_nationality")
+nationality_data <- inner_join(true_nationality, predicted_nationality)
+cols <- c("nationality", "predicted_nationality")
+#nationality_data$nationality <- as.factor(nationality_data$nationality)
+#nationality_data$predicted_nationality <- factor(nationality_data$predicted_nationality, levels = levels(nationality_data$nationality))
+
+nationality_data$right_prediction <- c()
+for(i in seq(1,nrow(nationality_data))){
+  nationality_data$nationality[i] <- gsub(" ", "", nationality_data$nationality[i])
+  nationality_data$gender[i] <- gsub(" ", "", nationality_data$gender[i])
+  nationality_data$predicted_nationality[i] <- gsub(" ", "", nationality_data$predicted_nationality[i])
+  if (nationality_data$nationality[i] == nationality_data$predicted_nationality[i]){
+    nationality_data$right_prediction[i] <- 1
+  }
+  else{
+    nationality_data$right_prediction[i] <- 0
+  }
+}
+
+nationality_data$gender <- as.factor(nationality_data$gender)
+```
+
+### New data frame storing information about right female/male predictions is created
+
+```{r}
+all_nationalities <- c(levels(as.factor(nationality_data$nationality)))
+female_right_predictions <- rep(0,length(all_nationalities))
+male_right_predictions <- rep(0,length(all_nationalities))
+
+right_predictions_per_nat <- data.frame(all_nationalities, female_right_predictions, male_right_predictions)
+
+for(i in seq(1,nrow(nationality_data))){
+  if(as.character(nationality_data$gender[i])=="female"){
+    current_nat <- nationality_data$nationality[i]
+    new_value <- right_predictions_per_nat[right_predictions_per_nat$all_nationalities==current_nat, "female_right_predictions"] + nationality_data$right_prediction[i]
+    right_predictions_per_nat[right_predictions_per_nat$all_nationalities==current_nat, "female_right_predictions"] <- new_value
+  }
+  else{
+    current_nat <- nationality_data$nationality[i]
+    new_value <- right_predictions_per_nat[right_predictions_per_nat$all_nationalities==current_nat, "male_right_predictions"] + nationality_data$right_prediction[i]
+    right_predictions_per_nat[right_predictions_per_nat$all_nationalities==current_nat, "male_right_predictions"] <- new_value
+  }
+}
+```
+### Barplot about gender differences in accuracy
+
+```{r}
+title <- paste("Gender Differences in Accuracy ", length(all_nationalities)-1," Nationalities and Else")
+
+p<-ggplot(data=right_predictions_per_nat) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=male_right_predictions, fill = "#67c45f")) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=female_right_predictions, fill = "#8e8bda"), width = 0.6) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x="Nationalities", y="Right Predictions (out of 1000)", 
+      title=title) +
+       scale_fill_manual(name = "Gender", 
+                    label = c("Male", "Female"), 
+                    values = c("#67c45f", "#8e8bda"))
+p
+```
+
+```{r}
+all_nationalities <- c(levels(as.factor(nationality_data$nationality)))
+
+TP_F <- rep(0,length(all_nationalities))
+TP_M <- rep(0,length(all_nationalities))
+
+FP_F <- rep(0,length(all_nationalities))
+FP_M <- rep(0,length(all_nationalities))
+
+FN_F <- rep(0,length(all_nationalities))
+FN_M <- rep(0,length(all_nationalities))
+
+TN_F <- rep(0,length(all_nationalities))
+TN_M <- rep(0,length(all_nationalities))
+
+sensitivity_F <- rep(0,length(all_nationalities))
+sensitivity_M <- rep(0,length(all_nationalities))
+
+specificity_F <- rep(0,length(all_nationalities))
+specificity_M <- rep(0,length(all_nationalities))
+
+
+Sensitivity_specificity_per_nat <- data.frame(all_nationalities, TP_F, TP_M, FP_F, FP_M, FN_F, FN_M, TN_F, TN_M, sensitivity_F, sensitivity_M, specificity_F, specificity_M)
+#Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities=="british", 8] <- 10
+
+for(nationality in all_nationalities){
+  for(i in seq(1,nrow(nationality_data))){
+    #current nationality = nationality
+    if(nationality_data$nationality[i]==nationality){
+      #True Positive, if predicted = current nationality:
+      if(nationality_data$predicted_nationality[i]==nationality){
+        #true positive female is in column 2
+        column <- 2
+      }
+      #False Negative, if predicted != current nationality:
+      if(nationality_data$predicted_nationality[i]!=nationality){
+        #false negative female is in column 6
+        column <- 6
+      }
+    }
+    #current nationality != nationality
+    else{
+      #False Positive, if predicted = current nationality:
+      if(nationality_data$predicted_nationality[i]==nationality){
+        #false positive female is in column 4
+        column <- 4
+      }
+      #True Negative, if predicted != current nationality:
+      if(nationality_data$predicted_nationality[i]!=nationality){
+        #true negative female is in column 8
+        column <- 8
+      }
+    }
+    if(nationality_data$gender[i]=="male"){
+      column <- column + 1
+    }
+    
+    Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, column] <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, column]+1
+  }
+}
+
+for(nationality in all_nationalities){
+  #sensitivity female:
+  TruePositiveFemale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "TP_F"]
+  FalseNegativeFemale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "FN_F"]
+  sensitivityFemale <- TruePositiveFemale/(TruePositiveFemale+FalseNegativeFemale)
+  Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "sensitivity_F"] <- sensitivityFemale
+  
+  #sensitivity male:
+  TruePositiveMale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "TP_M"]
+  FalseNegativeMale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "FN_M"]
+  sensitivityMale <- TruePositiveMale/(TruePositiveMale+FalseNegativeMale)
+  Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "sensitivity_M"] <- sensitivityMale
+  
+  #specificity female:
+  TrueNegativeFemale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "TN_F"]
+  FalsePositiveFemale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "FP_F"]
+  specificityFemale <- TrueNegativeFemale/(TrueNegativeFemale+FalsePositiveFemale)
+  Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "specificity_F"] <- specificityFemale
+  
+  #specificity male:
+  TrueNegativeMale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "TN_M"]
+  FalsePositiveMale <- Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "FP_M"]
+  specificityMale <- TrueNegativeMale/(TrueNegativeMale+FalsePositiveMale)
+  Sensitivity_specificity_per_nat[Sensitivity_specificity_per_nat$all_nationalities==nationality, "specificity_M"] <- specificityMale
+}
+```
+
+```{r}
+Sensitivity_specificity_per_nat
+```
+### Proportion of True Positives
+
+```{r}
+title <- paste("Sensitivity ", length(all_nationalities)-1," Nationalities and Else")
+
+p<-ggplot(data=Sensitivity_specificity_per_nat) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=sensitivity_M, fill = "#67c45f")) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=sensitivity_F, fill = "#8e8bda"), width = 0.6) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x="Nationalities", y="Sensitivity", 
+      title=title) +
+       scale_fill_manual(name = "Gender", 
+                    label = c("Male", "Female"), 
+                    values = c("#67c45f", "#8e8bda"))
+p
+```
+### Proportion of True Negatives
+
+```{r}
+title <- paste("Specificity ", length(all_nationalities)-1," Nationalities and Else")
+
+p<-ggplot(data=Sensitivity_specificity_per_nat) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=specificity_M, fill = "#67c45f")) +
+  geom_bar(stat='identity', aes(x=all_nationalities, y=specificity_F, fill = "#8e8bda"), width = 0.6) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x="Nationalities", y="Specificity", 
+      title=title) +
+       scale_fill_manual(name = "Gender", 
+                    label = c("Male", "Female"), 
+                    values = c("#67c45f", "#8e8bda"))
+p
+```
+
+```{r}
+nationality_data
+```
+```{r}
+#table(nationality_data$year_of_birth, nationality_data$right_prediction)
+years <- 1950:2000
+right_prediction <- rep(0,length(years))
+wrong_prediction <- rep(0,length(years))
+accuracy <- rep(0,length(years))
+age_differences <- data.frame(years, right_prediction, wrong_prediction, accuracy)
+for(i in seq(1,nrow(nationality_data))){
+  year <- nationality_data$year_of_birth[i]
+  if(nationality_data$right_prediction[i]==1){
+    age_differences[age_differences$years==year, "right_prediction"] <- age_differences[age_differences$years==year, "right_prediction"] + 1
+  }
+  else{
+    age_differences[age_differences$years==year, "wrong_prediction"] <- age_differences[age_differences$years==year, "wrong_prediction"] + 1
+  }
+}
+
+for (year in years){
+  age_differences[age_differences$years==year, "accuracy"] <- age_differences[age_differences$years==year, "right_prediction"]/age_differences[age_differences$years==year, "wrong_prediction"]
+}
+
+```
+
+```{r}
+p <- ggplot(data=age_differences, aes(x=years, y=accuracy))+
+  geom_line()+
+  labs(x="Year of Birth", y="Proportion of Right/Wrong Prediction", 
+      title="Proportion of Right/Wrong Prediction by Age")
+p
+  
+```
+
+
+
+
+
